@@ -1,0 +1,45 @@
+# Weekly updates. Minor and patch bumps arrive as one grouped pull request per
+# ecosystem; majors come one by one because they may need code changes.
+version: 2
+
+updates:
+  - package-ecosystem: gomod
+    directory: /apps/api
+    schedule:
+      interval: weekly
+    groups:
+      go-minor-patch:
+        update-types: [minor, patch]
+
+  # The repository root holds pnpm-lock.yaml, which covers the whole workspace.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      js-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directories:
+      - /apps/api
+      - /apps/web
+    schedule:
+      interval: weekly
+    groups:
+      docker-minor-patch:
+        update-types: [minor, patch]
+
+  # The Postgres image in compose.yaml.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "ui": "tui",
+  "globalPassThroughEnv": [
+    "GO*",
+    "CGO_ENABLED"
+  ],
+  "tasks": {
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "build": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*",
+        "!.env.example"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "!.next/dev/**",
+        "bin/**"
+      ],
+      "env": [
+        "DATABASE_URL",
+        "BETTER_AUTH_*",
+        "API_INTERNAL_URL",
+        "API_JWT_AUDIENCE",
+        "SMTP_URL",
+        "MAIL_FROM",
+        "AUTH_*"
+      ]
+    },
+    "test": {
+      "env": [
+        "TEST_DATABASE_URL"
+      ]
+    },
+    "lint": {},
+    "format:check": {},
+    "typecheck": {
+      "env": [
+        "DATABASE_URL",
+        "BETTER_AUTH_*",
+        "API_INTERNAL_URL",
+        "API_JWT_AUDIENCE",
+        "SMTP_URL",
+        "MAIL_FROM",
+        "AUTH_*"
+      ]
+    }
+  }
+}

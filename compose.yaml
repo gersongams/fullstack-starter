@@ -1,0 +1,37 @@
+# Local development services. The API and the web app run on the host.
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: starter
+      POSTGRES_PASSWORD: starter
+      POSTGRES_DB: starter
+    ports:
+      - "${POSTGRES_PORT:-54320}:5432"
+    volumes:
+      # Postgres 18 images keep their data under /var/lib/postgresql.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U starter -d starter"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Development mail server: catches every email the web app sends and shows it
+  # at http://localhost:18025. Nothing is delivered anywhere.
+  mailpit:
+    image: axllent/mailpit:v1.27
+    environment:
+      MP_MAX_MESSAGES: 500
+    ports:
+      # Loopback only: the inbox holds password-reset links.
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-10025}:1025"
+      - "127.0.0.1:${MAILPIT_UI_PORT:-18025}:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  postgres-data:

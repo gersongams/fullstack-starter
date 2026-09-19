@@ -1,0 +1,154 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API (Go)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+      - run: go vet ./...
+      # The store and HTTP tests create their own databases in the same Postgres
+      # that `make db-up` starts locally.
+      - run: docker compose up -d --wait
+        working-directory: .
+      - run: go test -race ./...
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          working-directory: apps/api
+      # Reports only vulnerabilities in code paths the API actually calls.
+      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  web:
+    name: Web (Next.js)
+    runs-on: ubuntu-latest
+    # Placeholders: the build and `next typegen` load the config, nothing connects.
+    env:
+      DATABASE_URL: postgres://ci:ci@localhost:5432/ci
+      BETTER_AUTH_SECRET: ci-only-secret-not-used-at-runtime-0000
+      BETTER_AUTH_URL: http://localhost:3100
+      API_INTERNAL_URL: http://localhost:8787
+      SMTP_URL: smtp://localhost:10025
+      MAIL_FROM: ci@localhost
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run lint format:check typecheck test build --filter=web
+      # Runtime dependencies only; devDependencies never reach the image.
+      - run: pnpm audit --prod --audit-level=high
+
+  contract:
+    name: API contract is up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: sqlc-dev/setup-sqlc@v5
+        with:
+          # Keep in step with SQLC in the Makefile.
+          sqlc-version: "1.31.1"
+      - run: pnpm install --frozen-lockfile
+      - run: make check SQLC=sqlc
+
+  docker:
+    name: Container images build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      # Built, never pushed: release.yml publishes images from tags.
+      - name: Build the API image
+        uses: docker/build-push-action@v7
+        with:
+          context: apps/api
+          push: false
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+      - name: Build the web image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          build-args: |
+            API_INTERNAL_URL=http://api:8787
+          push: false
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+  e2e:
+    name: End to end (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      # Same path as a new contributor: env files, dependencies, Postgres, migrations.
+      - run: make setup
+      - name: Start the API
+        working-directory: apps/api
+        run: |
+          go build -o bin/api ./cmd/api
+          set -a && . ./.env && set +a
+          nohup ./bin/api > "$RUNNER_TEMP/api.log" 2>&1 &
+      - name: Start the web app
+        run: |
+          pnpm --filter web build
+          # The standalone server, which is what the image runs. `next start`
+          # is not supported with output: "standalone". The script also loads
+          # apps/web/.env.local, which the standalone server does not read.
+          nohup pnpm --filter web start:standalone > "$RUNNER_TEMP/web.log" 2>&1 &
+      - name: Wait for both apps
+        run: |
+          for url in http://localhost:8787/readyz http://localhost:3100/sign-in; do
+            curl --fail --silent --show-error --retry 30 --retry-delay 2 --retry-connrefused --output /dev/null "$url"
+          done
+      - run: pnpm --filter web exec playwright install --with-deps chromium
+      - run: make e2e
+      - name: Show the app logs
+        if: failure()
+        run: tail -n 200 "$RUNNER_TEMP/api.log" "$RUNNER_TEMP/web.log"
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7

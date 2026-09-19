@@ -1,0 +1,12 @@
+{
+  "name": "api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Go API. This file only exposes the Go commands to Turborepo; there are no JS dependencies.",
+  "scripts": {
+    "dev": "set -a && . ./.env && set +a && go run ./cmd/api",
+    "build": "go build -o bin/api ./cmd/api",
+    "test": "go test -race ./...",
+    "lint": "go vet ./..."
+  }
+}

@@ -1,0 +1,26 @@
+# dependencies
+node_modules/
+# pnpm only: never commit another package manager's lockfile
+package-lock.json
+yarn.lock
+
+# local environment
+.env
+.env.*
+!.env.example
+
+# build output
+apps/api/bin/
+.next/
+out/
+
+# misc
+.DS_Store
+*.log
+*.tsbuildinfo
+
+# tooling scratch
+.playwright-mcp/
+
+# turborepo
+.turbo/

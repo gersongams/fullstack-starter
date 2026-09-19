@@ -1,0 +1,9 @@
+packages:
+  - apps/api
+  - apps/web
+
+allowBuilds:
+  # The root prepare script installs the hooks; the package's own postinstall is not needed.
+  lefthook: false
+  sharp: false
+  unrs-resolver: false

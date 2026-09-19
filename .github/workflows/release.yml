@@ -1,0 +1,66 @@
+name: Release
+
+# Publishes both container images to GHCR when a version tag is pushed:
+#   git tag v0.1.0 && git push origin v0.1.0
+# Deploying them is a separate step; see docs/deployment.md for the order
+# (migrations first, then the rollout).
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  images:
+    name: Publish ${{ matrix.app }} image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: api
+            context: apps/api
+            file: apps/api/Dockerfile
+          - app: web
+            context: .
+            file: apps/web/Dockerfile
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}-${{ matrix.app }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+      - uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          # Only the web image reads it: Next.js bakes the /api/v1 rewrite into
+          # the build, so one image targets one API address. Set the repository
+          # variable API_INTERNAL_URL to the address the web app uses to reach
+          # the API in production.
+          build-args: |
+            API_INTERNAL_URL=${{ vars.API_INTERNAL_URL || 'http://api:8787' }}
+            VERSION=${{ github.ref_name }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max

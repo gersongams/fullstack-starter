@@ -1,0 +1,27 @@
+# Git hooks, installed by `pnpm install` (the root "prepare" script).
+# Skip once with LEFTHOOK=0 git commit ...; CI runs the same checks regardless.
+
+pre-commit:
+  parallel: true
+  commands:
+    gofmt:
+      root: apps/api/
+      glob: "*.go"
+      # gofmt -l prints the files it would change and always exits 0.
+      run: test -z "$(gofmt -l {staged_files})" || { gofmt -l {staged_files}; echo "run gofmt -w on the files above"; exit 1; }
+    oxfmt:
+      root: apps/web/
+      glob: "*.{ts,tsx,js,mjs,json,css}"
+      run: pnpm exec oxfmt --check {staged_files}
+    oxlint:
+      root: apps/web/
+      glob: "*.{ts,tsx,js,mjs}"
+      run: pnpm exec oxlint --deny-warnings {staged_files}
+
+pre-push:
+  commands:
+    lint:
+      run: pnpm lint
+    generated:
+      # Fails when the query code, the OpenAPI spec or the client is stale.
+      run: make check
