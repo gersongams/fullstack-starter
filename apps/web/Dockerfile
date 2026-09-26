@@ -2,7 +2,7 @@
 # Build from the monorepo root:
 #   docker build -f apps/web/Dockerfile --build-arg API_INTERNAL_URL=http://api:8787 -t starter-web .
 
-FROM node:24-slim AS base
+FROM node:26-slim AS base
 ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH NEXT_TELEMETRY_DISABLED=1
 RUN corepack enable
 WORKDIR /repo
@@ -26,7 +26,7 @@ ENV API_INTERNAL_URL=$API_INTERNAL_URL \
     MAIL_FROM=build@localhost
 RUN pnpm --filter web build
 
-FROM node:24-slim AS runner
+FROM node:26-slim AS runner
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3100 HOSTNAME=0.0.0.0
 WORKDIR /app
 COPY --from=build --chown=node:node /repo/apps/web/.next/standalone ./
